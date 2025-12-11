@@ -136,12 +136,12 @@ class LatentBrownianBridgeModel(BrownianBridgeModel):
         x_rec, _ = self.vqgan(x)
         return x_rec
 
-    # @torch.no_grad()
-    # def reverse_sample(self, x, skip=False):
-    #     x_ori_latent = self.vqgan.encoder(x)
-    #     temp, _ = self.brownianbridge.reverse_p_sample_loop(x_ori_latent, x, skip=skip, clip_denoised=False)
-    #     x_latent = temp[-1]
-    #     x_latent = self.vqgan.quant_conv(x_latent)
-    #     x_latent_quant, _, _ = self.vqgan.quantize(x_latent)
-    #     out = self.vqgan.decode(x_latent_quant)
-    #     return out
+    @torch.no_grad()
+    def reverse_sample(self, x, skip=False):
+        x_ori_latent = self.vqgan.encoder(x)
+        temp, _ = self.brownianbridge.reverse_p_sample_loop(x_ori_latent, x, skip=skip, clip_denoised=False)
+        x_latent = temp[-1]
+        x_latent = self.vqgan.quant_conv(x_latent)
+        x_latent_quant, _, _ = self.vqgan.quantize(x_latent)
+        out = self.vqgan.decode(x_latent_quant)
+        return out

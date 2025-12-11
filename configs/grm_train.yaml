@@ -1,4 +1,3 @@
-# Brownian Bridge Diffusion Model (GRM Training: 256x256)
 runner: "BBDMRunner"
 training:
   n_epochs: 150
@@ -9,20 +8,20 @@ training:
   accumulate_grad_batches: 2 
 
 testing:
-  clip_denoised: True
+  clip_denoised: False #
   sample_num: 5
 
 data:
   dataset_name: 'SAR_to_Layout' 
   dataset_type: 'custom_aligned' 
   dataset_config:
-    dataset_path: '/mnt/hdd1tb/Data_BBDM_GRM' 
-    image_size: 128   
-    channels: 1 
+    dataset_path: '/mnt/hdd1tb/Data_BBDM_GRM_3Band/' 
+    image_size: 256   
+    channels: 3 
     to_normal: True
     flip: False
   train:
-    batch_size: 1
+    batch_size: 2
     shuffle: True
   val:
     batch_size: 1 
@@ -31,14 +30,35 @@ data:
     batch_size: 1
 
 model:
-  model_name: "BBDM_GRM_2" 
-  model_type: "BBDM" 
+  model_name: "LBBDM_SAR3_Layout1_GBCE2" 
+  model_type: "LBBDM" 
   latent_before_quant_conv: False
   normalize_latent: False
   only_load_latent_mean_std: False
+  # model_load_path:  "/mnt/hdd1tb/SAR2Optical/BBDM-main/results/SAR_to_Layout/LBBDM_SAR3_Layout1_GBCE/checkpoint/latest_model_20.pth" # model checkpoint path
+  # optim_sche_load_path: "/mnt/hdd1tb/SAR2Optical/BBDM-main/results/SAR_to_Layout/LBBDM_SAR3_Layout1_GBCE/checkpoint/latest_optim_sche_20.pth" # optimizer scheduler checkpoint path
 
-  model_load_path: "/mnt/hdd1tb/SAR2Optical/BBDM-main/results/SAR_to_Layout/BBDM_GRM_128_1ch/checkpoint/top_model_epoch_72.pth"
-  optim_sche_load_path: "/mnt/hdd1tb/SAR2Optical/BBDM-main/results/SAR_to_Layout/BBDM_GRM_128_1ch/checkpoint/top_optim_sche_epoch_72.pth"
+  VQGAN:
+    params:
+      ckpt_path: '/mnt/hdd1tb/Downloads/vq-f4/model.ckpt'
+      embed_dim: 3
+      n_embed: 8192
+      ddconfig:
+        double_z: false
+        z_channels: 3 
+        resolution: 256
+        in_channels: 3 
+        out_ch: 3
+        ch: 128
+        ch_mult: !!python/tuple
+          - 1
+          - 2
+          - 4
+        num_res_blocks: 2
+        attn_resolutions: []
+        dropout: 0.2
+      lossconfig:
+        target: torch.nn.Identity
 
   EMA:
     use_ema: True
@@ -48,8 +68,8 @@ model:
 
   CondStageParams:
     n_stages: 2
-    in_channels: 3
-    out_channels: 3
+    in_channels: 3   
+    out_channels: 3 
 
   BB:
     optimizer:
@@ -68,7 +88,7 @@ model:
     params:
       mt_type: 'linear'
       objective: 'grad'
-      loss_type: 'l1'
+      loss_type: 'l1' 
 
       skip_sample: True
       sample_type: 'linear'
@@ -79,25 +99,29 @@ model:
       max_var: 1.0
 
       UNetParams:
-        image_size: 128
+        image_size: 64 
         use_checkpoint: True
     
-        in_channels: 2
-        model_channels: 128
-        out_channels: 1
-        num_res_blocks: 3
+        in_channels: 6
+        model_channels: 64
+        
+        out_channels: 3
+        
+        num_res_blocks: 2
+        
         attention_resolutions: !!python/tuple
-          - 32
           - 16
           - 8
         channel_mult: !!python/tuple
           - 1
+          - 2
           - 4
           - 8
+        
         conv_resample: True
         dims: 2
         num_heads: 8
-        num_head_channels: 64
+        num_head_channels: 32
         use_scale_shift_norm: True
         resblock_updown: True
         use_spatial_transformer: False

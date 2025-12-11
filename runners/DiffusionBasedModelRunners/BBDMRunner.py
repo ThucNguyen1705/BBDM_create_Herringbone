@@ -22,6 +22,7 @@ class BBDMRunner(DiffusionBaseRunner):
         if config.model.model_type == "BBDM":
             bbdmnet = BrownianBridgeModel(config.model).to(config.training.device[0])
         elif config.model.model_type == "LBBDM":
+            from model.BrownianBridge.LatentBrownianBridgeModel import LatentBrownianBridgeModel
             bbdmnet = LatentBrownianBridgeModel(config.model).to(config.training.device[0])
         else:
             raise NotImplementedError
@@ -192,16 +193,16 @@ class BBDMRunner(DiffusionBaseRunner):
 
         grid_size = 4
 
-        # samples, one_step_samples = net.sample(x_cond,
-        #                                        clip_denoised=self.config.testing.clip_denoised,
-        #                                        sample_mid_step=True)
-        # self.save_images(samples, reverse_sample_path, grid_size, save_interval=200,
-        #                  writer_tag=f'{stage}_sample' if stage != 'test' else None)
-        #
-        # self.save_images(one_step_samples, reverse_one_step_path, grid_size, save_interval=200,
-        #                  writer_tag=f'{stage}_one_step_sample' if stage != 'test' else None)
-        #
-        # sample = samples[-1]
+        samples, one_step_samples = net.sample(x_cond,
+                                               clip_denoised=self.config.testing.clip_denoised,
+                                               sample_mid_step=True)
+        self.save_images(samples, reverse_sample_path, grid_size, save_interval=200,
+                         writer_tag=f'{stage}_sample' if stage != 'test' else None)
+        
+        self.save_images(one_step_samples, reverse_one_step_path, grid_size, save_interval=200,
+                         writer_tag=f'{stage}_one_step_sample' if stage != 'test' else None)
+        
+        sample = samples[-1]
         sample = net.sample(x_cond, clip_denoised=self.config.testing.clip_denoised).to('cpu')
         image_grid = get_image_grid(sample, grid_size, to_normal=self.config.data.dataset_config.to_normal)
         im = Image.fromarray(image_grid)

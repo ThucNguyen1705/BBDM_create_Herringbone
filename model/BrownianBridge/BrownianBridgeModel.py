@@ -1,11 +1,11 @@
 import pdb
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
 from tqdm.autonotebook import tqdm
 import numpy as np
+import lpips  
 
 from model.utils import extract, default
 from model.BrownianBridge.base.modules.diffusionmodules.openaimodel import UNetModel
@@ -16,7 +16,6 @@ class BrownianBridgeModel(nn.Module):
     def __init__(self, model_config):
         super().__init__()
         self.model_config = model_config
-        # model hyperparameters
         model_params = model_config.BB.params
         self.num_timesteps = model_params.num_timesteps
         self.mt_type = model_params.mt_type
@@ -38,6 +37,11 @@ class BrownianBridgeModel(nn.Module):
         self.condition_key = model_params.UNetParams.condition_key
 
         self.denoise_fn = UNetModel(**vars(model_params.UNetParams))
+
+        print("Initialize LPIPS Loss...")
+        self.lpips_fn = lpips.LPIPS(net='alex').eval()
+        for param in self.lpips_fn.parameters():
+            param.requires_grad = False
 
     def register_schedule(self):
         T = self.num_timesteps
@@ -96,15 +100,6 @@ class BrownianBridgeModel(nn.Module):
         return self.p_losses(x, y, context, t)
 
     def p_losses(self, x0, y, context, t, noise=None):
-        """
-        model loss
-        :param x0: encoded x_ori, E(x_ori) = x0
-        :param y: encoded y_ori, E(y_ori) = y
-        :param y_ori: original source domain image
-        :param t: timestep
-        :param noise: Standard Gaussian Noise
-        :return: loss
-        """
         b, c, h, w = x0.shape
         noise = default(noise, lambda: torch.randn_like(x0))
 
@@ -115,15 +110,44 @@ class BrownianBridgeModel(nn.Module):
             recloss = (objective - objective_recon).abs().mean()
         elif self.loss_type == 'l2':
             recloss = F.mse_loss(objective, objective_recon)
+        elif self.loss_type == 'wbce':
+            objective_norm = torch.sigmoid(objective)
+            objective_recon_norm = torch.sigmoid(objective_recon)
+            pos_weight = torch.tensor(5.0, device=x0.device)
+            bce = F.binary_cross_entropy(
+                input=objective_recon_norm,
+                target=objective_norm,
+                weight=None,
+                reduction='none'
+            )
+            wbce = pos_weight * objective_norm * bce + (1 - objective_norm) * bce
+            recloss = wbce.mean()
         else:
-            raise NotImplementedError()
+            raise NotImplementedError(f"loss_type {self.loss_type} not supported")
 
         x0_recon = self.predict_x0_from_objective(x_t, y, t, objective_recon)
+        x0_clamped = x0.clamp(-1., 1.)
+        x0_recon_clamped = x0_recon.clamp(-1., 1.)
+        
+        if x0_clamped.shape[1] == 1:
+            x0_lpips = x0_clamped.repeat(1, 3, 1, 1)
+            x0_recon_lpips = x0_recon_clamped.repeat(1, 3, 1, 1)
+        else:
+            x0_lpips = x0_clamped
+            x0_recon_lpips = x0_recon_clamped
+            
+        lpips_loss = self.lpips_fn(x0_recon_lpips, x0_lpips).mean()
+        
+        total_loss = recloss + 0.5 * lpips_loss
+
         log_dict = {
-            "loss": recloss,
+            "loss": total_loss,
+            "pixel_loss": recloss,
+            "lpips_loss": lpips_loss,
             "x0_recon": x0_recon
         }
-        return recloss, log_dict
+        return total_loss, log_dict
+
 
     def q_sample(self, x0, y, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x0))
